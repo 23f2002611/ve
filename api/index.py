@@ -1,9 +1,8 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+
 import statistics
 
 app = Flask(__name__)
-CORS(app)
 
 # Telemetry data
 TELEMETRY_DATA = [
@@ -80,9 +79,16 @@ def analyze_region(region_data, threshold_ms):
         "breaches": sum(1 for lat in latencies if lat > threshold_ms)
     }
 
-@app.route('/api', methods=['POST'])
-@app.route('/api/', methods=['POST'])
+@app.route('/api', methods=['POST', 'OPTIONS'])
+@app.route('/api/', methods=['POST', 'OPTIONS'])
 def analyze():
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     try:
         data = request.get_json()
         regions = data.get('regions', [])
@@ -93,6 +99,12 @@ def analyze():
             region_records = [r for r in TELEMETRY_DATA if r['region'] == region]
             response_data[region] = analyze_region(region_records, threshold_ms)
         
-        return jsonify(response_data)
+        response = jsonify(response_data)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_response = jsonify({"error": str(e)})
+        error_response.headers['Access-Control-Allow-Origin'] = '*'
+        return error_response, 500
