@@ -1,7 +1,9 @@
-# api/index.py
-from http.server import BaseHTTPRequestHandler
-import json
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import statistics
+
+app = Flask(__name__)
+CORS(app)
 
 # Telemetry data
 TELEMETRY_DATA = [
@@ -78,38 +80,19 @@ def analyze_region(region_data, threshold_ms):
         "breaches": sum(1 for lat in latencies if lat > threshold_ms)
     }
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        """Handle POST requests for telemetry analysis."""
-        try:
-            # Read request body
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-            request_data = json.loads(body.decode('utf-8'))
-            
-            # Extract parameters
-            regions = request_data.get('regions', [])
-            threshold_ms = request_data.get('threshold_ms', 180)
-            
-            # Analyze each requested region
-            response_data = {}
-            for region in regions:
-                region_records = [r for r in TELEMETRY_DATA if r['region'] == region]
-                response_data[region] = analyze_region(region_records, threshold_ms)
-            
-            # Send response
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Accept')
-            self.end_headers()
-            self.wfile.write(json.dumps(response_data).encode('utf-8'))
-            
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            error_response = {"error": str(e)}
-            self.wfile.write(json.dumps(error_response).encode('utf-8'))
+@app.route('/api', methods=['POST'])
+@app.route('/api/', methods=['POST'])
+def analyze():
+    try:
+        data = request.get_json()
+        regions = data.get('regions', [])
+        threshold_ms = data.get('threshold_ms', 180)
+        
+        response_data = {}
+        for region in regions:
+            region_records = [r for r in TELEMETRY_DATA if r['region'] == region]
+            response_data[region] = analyze_region(region_records, threshold_ms)
+        
+        return jsonify(response_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
