@@ -79,15 +79,6 @@ def analyze_region(region_data, threshold_ms):
     }
 
 class handler(BaseHTTPRequestHandler):
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests."""
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Accept')
-        self.send_header('Access-Control-Max-Age', '86400')
-        self.end_headers()
-
     def do_POST(self):
         """Handle POST requests for telemetry analysis."""
         try:
