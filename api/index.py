@@ -1,110 +1,57 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+import pandas as pd
+import numpy as np
+from pathlib import Path
 
-import statistics
+app = FastAPI()
 
-app = Flask(__name__)
+# Enable CORS for all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
-# Telemetry data
-TELEMETRY_DATA = [
-  {"region": "apac", "service": "analytics", "latency_ms": 210.89, "uptime_pct": 98.817, "timestamp": 20250301},
-  {"region": "apac", "service": "support", "latency_ms": 226.4, "uptime_pct": 99.341, "timestamp": 20250302},
-  {"region": "apac", "service": "checkout", "latency_ms": 190.78, "uptime_pct": 98.608, "timestamp": 20250303},
-  {"region": "apac", "service": "checkout", "latency_ms": 104.83, "uptime_pct": 97.159, "timestamp": 20250304},
-  {"region": "apac", "service": "recommendations", "latency_ms": 149.12, "uptime_pct": 97.73, "timestamp": 20250305},
-  {"region": "apac", "service": "checkout", "latency_ms": 176.02, "uptime_pct": 99.497, "timestamp": 20250306},
-  {"region": "apac", "service": "support", "latency_ms": 114.97, "uptime_pct": 97.425, "timestamp": 20250307},
-  {"region": "apac", "service": "checkout", "latency_ms": 177.64, "uptime_pct": 97.606, "timestamp": 20250308},
-  {"region": "apac", "service": "catalog", "latency_ms": 128.3, "uptime_pct": 98.358, "timestamp": 20250309},
-  {"region": "apac", "service": "support", "latency_ms": 172.4, "uptime_pct": 97.374, "timestamp": 20250310},
-  {"region": "apac", "service": "analytics", "latency_ms": 130.14, "uptime_pct": 97.131, "timestamp": 20250311},
-  {"region": "apac", "service": "recommendations", "latency_ms": 173.18, "uptime_pct": 99.006, "timestamp": 20250312},
-  {"region": "emea", "service": "analytics", "latency_ms": 139.75, "uptime_pct": 99.276, "timestamp": 20250301},
-  {"region": "emea", "service": "recommendations", "latency_ms": 149.53, "uptime_pct": 97.511, "timestamp": 20250302},
-  {"region": "emea", "service": "checkout", "latency_ms": 188.29, "uptime_pct": 98.71, "timestamp": 20250303},
-  {"region": "emea", "service": "analytics", "latency_ms": 214.03, "uptime_pct": 97.735, "timestamp": 20250304},
-  {"region": "emea", "service": "checkout", "latency_ms": 160.45, "uptime_pct": 99.455, "timestamp": 20250305},
-  {"region": "emea", "service": "payments", "latency_ms": 168.15, "uptime_pct": 98.722, "timestamp": 20250306},
-  {"region": "emea", "service": "analytics", "latency_ms": 191.22, "uptime_pct": 98.675, "timestamp": 20250307},
-  {"region": "emea", "service": "support", "latency_ms": 186.33, "uptime_pct": 97.766, "timestamp": 20250308},
-  {"region": "emea", "service": "recommendations", "latency_ms": 208.5, "uptime_pct": 97.142, "timestamp": 20250309},
-  {"region": "emea", "service": "catalog", "latency_ms": 162.63, "uptime_pct": 97.494, "timestamp": 20250310},
-  {"region": "emea", "service": "checkout", "latency_ms": 176.6, "uptime_pct": 99.451, "timestamp": 20250311},
-  {"region": "emea", "service": "recommendations", "latency_ms": 156.26, "uptime_pct": 98.11, "timestamp": 20250312},
-  {"region": "amer", "service": "catalog", "latency_ms": 159.54, "uptime_pct": 99.124, "timestamp": 20250301},
-  {"region": "amer", "service": "catalog", "latency_ms": 112.89, "uptime_pct": 98.684, "timestamp": 20250302},
-  {"region": "amer", "service": "catalog", "latency_ms": 197.13, "uptime_pct": 97.486, "timestamp": 20250303},
-  {"region": "amer", "service": "payments", "latency_ms": 156.26, "uptime_pct": 98.946, "timestamp": 20250304},
-  {"region": "amer", "service": "checkout", "latency_ms": 107.63, "uptime_pct": 98.99, "timestamp": 20250305},
-  {"region": "amer", "service": "analytics", "latency_ms": 197.66, "uptime_pct": 97.498, "timestamp": 20250306},
-  {"region": "amer", "service": "catalog", "latency_ms": 190.13, "uptime_pct": 99.284, "timestamp": 20250307},
-  {"region": "amer", "service": "support", "latency_ms": 207.38, "uptime_pct": 98.294, "timestamp": 20250308},
-  {"region": "amer", "service": "checkout", "latency_ms": 176.65, "uptime_pct": 99.458, "timestamp": 20250309},
-  {"region": "amer", "service": "checkout", "latency_ms": 115.06, "uptime_pct": 98.076, "timestamp": 20250310},
-  {"region": "amer", "service": "payments", "latency_ms": 122.07, "uptime_pct": 97.893, "timestamp": 20250311},
-  {"region": "amer", "service": "checkout", "latency_ms": 141.32, "uptime_pct": 97.426, "timestamp": 20250312}
-]
+# Load the dataset once when the app starts
+# The data file should be in the same directory as this script
+DATA_FILE = Path(__file__).parent / "q-vercel-latency.json"
+df = pd.read_json(DATA_FILE)
 
-def calculate_percentile(values, percentile):
-    """Calculate the percentile of a list of values."""
-    if not values:
-        return 0
-    sorted_values = sorted(values)
-    index = (percentile / 100) * (len(sorted_values) - 1)
-    lower = int(index)
-    upper = lower + 1
-    weight = index - lower
-    
-    if upper >= len(sorted_values):
-        return sorted_values[lower]
-    
-    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
 
-def analyze_region(region_data, threshold_ms):
-    """Analyze telemetry data for a specific region."""
-    if not region_data:
-        return {
-            "avg_latency": 0,
-            "p95_latency": 0,
-            "avg_uptime": 0,
-            "breaches": 0
-        }
-    
-    latencies = [record["latency_ms"] for record in region_data]
-    uptimes = [record["uptime_pct"] for record in region_data]
-    
-    return {
-        "avg_latency": round(statistics.mean(latencies), 2),
-        "p95_latency": round(calculate_percentile(latencies, 95), 2),
-        "avg_uptime": round(statistics.mean(uptimes), 2),
-        "breaches": sum(1 for lat in latencies if lat > threshold_ms)
-    }
+@app.get("/")
+async def root():
+    return {"message": "Vercel Latency Analytics API is running."}
 
-@app.route('/api', methods=['POST', 'OPTIONS'])
-@app.route('/api/', methods=['POST', 'OPTIONS'])
-def analyze():
-    if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        return response
-    
-    try:
-        data = request.get_json()
-        regions = data.get('regions', [])
-        threshold_ms = data.get('threshold_ms', 180)
-        
-        response_data = {}
-        for region in regions:
-            region_records = [r for r in TELEMETRY_DATA if r['region'] == region]
-            response_data[region] = analyze_region(region_records, threshold_ms)
-        
-        response = jsonify(response_data)
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        return response
-    except Exception as e:
-        error_response = jsonify({"error": str(e)})
-        error_response.headers['Access-Control-Allow-Origin'] = '*'
-        return error_response, 500
+
+@app.post("/api/")
+async def get_latency_stats(request: Request):
+    payload = await request.json()
+    regions_to_process = payload.get("regions", [])
+    threshold = payload.get("threshold_ms", 200)
+
+    results = []
+
+    for region in regions_to_process:
+        region_df = df[df["region"] == region]
+
+        if not region_df.empty:
+            avg_latency = round(region_df["latency_ms"].mean(), 2)
+            p95_latency = round(np.percentile(region_df["latency_ms"], 95), 2)
+            avg_uptime = round(region_df["uptime_pct"].mean(), 3)
+            breaches = int(region_df[region_df["latency_ms"] > threshold].shape[0])
+
+            results.append(
+                {
+                    "region": region,
+                    "avg_latency": avg_latency,
+                    "p95_latency": p95_latency,
+                    "avg_uptime": avg_uptime,
+                    "breaches": breaches,
+                }
+            )
+
+    return {"regions": results}
